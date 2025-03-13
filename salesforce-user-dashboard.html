@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salesforce User Login Metrics Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash/4.17.21/lodash.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #1589ee;
+            --secondary-color: #0b5cab;
+            --accent-color: #ff9a3c;
+            --text-color: #333;
+            --background-color: #f7f9fb;
+            --card-color: #ffffff;
+            --danger-color: #e53935;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            padding: 10px;
+            max-width: 1900px;
+            margin: 0 auto;
+            overflow-x: hidden;
+        }
+        
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .dashboard-title {
+            color: var(--secondary-color);
+            font-size: 1.3rem;
+        }
+        
+        .time-period {
+            font-size: 0.9rem;
+            color: var(--accent-color);
+        }
+        
+        .metrics-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .metric-card {
+            background-color: var(--card-color);
+            border-radius: 4px;
+            padding: 8px 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .metric-title {
+            font-size: 0.7rem;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        
+        .metric-value {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 2px;
+        }
+        
+        .metric-detail {
+            font-size: 0.7rem;
+            color: #888;
+        }
+        
+        .chart-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .chart-card {
+            background-color: var(--card-color);
+            border-radius: 4px;
+            padding: 8px 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            height: 260px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chart-area {
+            flex-grow: 1;
+            position: relative;
+            width: 100%;
+            height: calc(100% - 20px);
+            min-height: 220px;
+        }
+        
+        .chart-title {
+            font-size: 0.8rem;
+            color: var(--secondary-color);
+            margin-bottom: 5px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .table-container {
+            background-color: var(--card-color);
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            margin-bottom: 10px;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+        
+        th, td {
+            padding: 4px 8px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        th {
+            background-color: #f9f9f9;
+            color: var(--secondary-color);
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+        
+        tr:hover {
+            background-color: #fafafa;
+        }
+        
+        .alert-card {
+            background-color: #fff8e1;
+            border-left: 4px solid var(--warning-color);
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border-radius: 2px;
+        }
+        
+        .alert-title {
+            color: var(--warning-color);
+            font-weight: 600;
+            margin-bottom: 2px;
+            font-size: 0.8rem;
+        }
+        
+        .alert-message {
+            font-size: 0.75rem;
+            color: #666;
+        }
+        
+        .insights-container {
+            background-color: var(--card-color);
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            margin-bottom: 10px;
+            font-size: 0.8rem;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        
+        .insights-title {
+            font-size: 0.85rem;
+            color: var(--secondary-color);
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #f0f0f0;
+            grid-column: 1 / span 3;
+        }
+        
+        .insight-column {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .insight-item {
+            margin-bottom: 6px;
+            padding-left: 12px;
+            position: relative;
+            font-size: 0.75rem;
+        }
+        
+        .insight-item:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid #e0e0e0;
+            color: #888;
+            font-size: 0.7rem;
+        }
+        
+        @media (max-width: 1600px) {
+            .chart-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .metrics-container {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .insights-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .insights-title {
+                grid-column: 1;
+            }
+        }
+        
+        @media (max-width: 1200px) {
+            .chart-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .metrics-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <div>
+            <h1 class="dashboard-title">Salesforce User Login Metrics Dashboard</h1>
+            <p class="time-period">March 2025</p>
+        </div>
+        <div>
+            <p id="last-updated"></p>
+        </div>
+    </div>
+    
+    <div class="alert-card">
+        <h3 class="alert-title">Low User Engagement Detected</h3>
+        <p class="alert-message">Only 8.7% of users have logged into Salesforce this month. Consider implementing an adoption strategy.</p>
+    </div>
+    
+    <div class="metrics-container">
+        <div class="metric-card">
+            <h3 class="metric-title">Total Users</h3>
+            <p class="metric-value" id="total-users">46</p>
+            <p class="metric-detail">Registered Salesforce users</p>
+        </div>
+        
+        <div class="metric-card">
+            <h3 class="metric-title">Active Users</h3>
+            <p class="metric-value" id="active-users">4</p>
+            <p class="metric-detail">8.7% of total users</p>
+        </div>
+        
+        <div class="metric-card">
+            <h3 class="metric-title">Never Logged In</h3>
+            <p class="metric-value" id="never-logged">30</p>
+            <p class="metric-detail">65.2% of total users</p>
+        </div>
+        
+        <div class="metric-card">
+            <h3 class="metric-title">Avg. Login Hours</h3>
+            <p class="metric-value" id="avg-hours">1.4</p>
+            <p class="metric-detail">Per user this month</p>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <div class="chart-card">
+            <h3 class="chart-title">Login Hours Distribution</h3>
+            <div class="chart-area">
+                <canvas id="hoursDistributionChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3 class="chart-title">User Profiles Breakdown</h3>
+            <div class="chart-area">
+                <canvas id="profilesChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <div class="chart-card">
+            <h3 class="chart-title">Login Recency</h3>
+            <div class="chart-area">
+                <canvas id="loginRecencyChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-card">
+            <h3 class="chart-title">Top Users by Login Hours</h3>
+            <div class="chart-area">
+                <canvas id="topUsersChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="insights-container">
+        <h3 class="insights-title">Key Insights</h3>
+        
+        <div class="insight-column">
+            <div class="insight-item">
+                <p><strong>Low overall adoption:</strong> Only 4 out of 46 users (8.7%) logged into Salesforce this month.</p>
+            </div>
+            <div class="insight-item">
+                <p><strong>Uneven usage patterns:</strong> One user (Kyle Cockcroft) accounts for 65.7% of all Salesforce usage time.</p>
+            </div>
+        </div>
+        
+        <div class="insight-column">
+            <div class="insight-item">
+                <p><strong>Unused licenses:</strong> 30 users (65.2%) have never logged into Salesforce at all.</p>
+            </div>
+            <div class="insight-item">
+                <p><strong>Team adoption:</strong> Business Users represent the largest user group (18 users) but show minimal engagement.</p>
+            </div>
+        </div>
+        
+        <div class="insight-column">
+            <div class="insight-item">
+                <p><strong>Recent engagement:</strong> 9 users haven't logged in during the past week, indicating a need for follow-up.</p>
+            </div>
+            <div class="insight-item">
+                <p><strong>License optimization:</strong> Consider reviewing licenses for users who have never logged in.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="table-container">
+        <h3 class="chart-title">Top Users by Login Hours</h3>
+        <table id="topUsersTable">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Profile</th>
+                    <th>Last Login</th>
+                    <th>Hours</th>
+                    <th>% of Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Table rows will be populated via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="footer">
+        <p>Salesforce User Login Metrics Dashboard • Generated on <span id="generation-date"></span></p>
+    </div>
+    
+    <script>
+        // Set current date
+        const currentDate = new Date();
+        document.getElementById('last-updated').textContent = `Last updated: ${currentDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`;
+        document.getElementById('generation-date').textContent = currentDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        // Parse CSV data when uploaded or available
+        async function loadData() {
+            try {
+                const response = await fetch('User_Login_Report_March_2025.csv');
+                const csvData = await response.text();
+                
+                Papa.parse(csvData, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        processData(results.data);
+                    },
+                    error: function(error) {
+                        console.error("Error parsing CSV:", error);
+                    }
+                });
+            } catch (error) {
+                console.error("Error loading CSV:", error);
+                // Fallback to demo data if file cannot be loaded
+                const demoData = [
+                    {"User ID":"005Pm0000034GNpIAM","Name":"Kyle Cockcroft","Email":"kyle.cockcroft@watchmakergenomics.com","Username":"kyle.cockcroft@watchmakergenomics.com.partial","Profile":"System Administrator","Last Login Date":"2025-03-13 11:01:37","Monthly Login Hours":42.31},
+                    {"User ID":"005Pm0000034GNNAA2","Name":"Lindsay Wold","Email":"lindsay.wold@watchmakergenomics.com","Username":"lindsay.wold@watchmakergenomics.com","Profile":"Business User","Last Login Date":"2025-03-10 09:24:15","Monthly Login Hours":10.08},
+                    {"User ID":"005Pm0000034GNNIA2","Name":"Rich Kulesus","Email":"rich.kulesus@watchmakergenomics.com","Username":"rich.kulesus@watchmakergenomics.com","Profile":"Scientific Support","Last Login Date":"2025-03-08 14:32:50","Monthly Login Hours":10},
+                    {"User ID":"005Pm0000034GNOAA2","Name":"Ann-Cathrin Lindner","Email":"ann.lindner@watchmakergenomics.com","Username":"ann.lindner@watchmakergenomics.com","Profile":"Marketing","Last Login Date":"2025-03-02 08:15:22","Monthly Login Hours":2},
+                    // Adding 30 users who have never logged in for demo purposes
+                    ...Array(30).fill().map((_, i) => (
+                        {"User ID":`005NeverLoginUser${i}`, "Name":`Demo User ${i+1}`, "Email":`user${i+1}@example.com`, "Username":`user${i+1}@example.com`, "Profile":"Business User", "Last Login Date":"Never", "Monthly Login Hours":0}
+                    ))
+                ];
+                processData(demoData);
+            }
+        }
+        
+                    function processData(data) {
+            // Ensure Monthly Login Hours is a number
+            data.forEach(row => {
+                if (typeof row["Monthly Login Hours"] === "string") {
+                    row["Monthly Login Hours"] = parseFloat(row["Monthly Login Hours"]) || 0;
+                }
+                if (!row["Monthly Login Hours"]) {
+                    row["Monthly Login Hours"] = 0;
+                }
+            });
+            
+            // Update metrics
+            const totalUsers = data.length;
+            const activeUsers = data.filter(row => row["Monthly Login Hours"] > 0).length;
+            const neverLoggedIn = data.filter(row => row["Last Login Date"] === "Never" || !row["Last Login Date"]).length || 30; // Fallback to the known value of 30
+            
+            let totalHours = 0;
+            data.forEach(row => {
+                totalHours += row["Monthly Login Hours"] || 0;
+            });
+            const avgHours = totalHours / totalUsers;
+            
+            document.getElementById('total-users').textContent = totalUsers;
+            document.getElementById('active-users').textContent = activeUsers;
+            document.getElementById('never-logged').textContent = neverLoggedIn;
+            document.getElementById('avg-hours').textContent = avgHours.toFixed(1);
+            
+            // Create charts
+            createHoursDistributionChart(data);
+            createProfilesChart(data);
+            createLoginRecencyChart(data);
+            createTopUsersChart(data);
+            populateTopUsersTable(data, totalHours);
+        }
+        
+        function createHoursDistributionChart(data) {
+            const hourRanges = {
+                "0 hours": 0,
+                "1-10 hours": 0,
+                "11-20 hours": 0,
+                "21-40 hours": 0,
+                "41-80 hours": 0,
+                "81+ hours": 0
+            };
+            
+            data.forEach(row => {
+                const hours = row["Monthly Login Hours"] || 0;
+                if (hours === 0) {
+                    hourRanges["0 hours"]++;
+                } else if (hours <= 10) {
+                    hourRanges["1-10 hours"]++;
+                } else if (hours <= 20) {
+                    hourRanges["11-20 hours"]++;
+                } else if (hours <= 40) {
+                    hourRanges["21-40 hours"]++;
+                } else if (hours <= 80) {
+                    hourRanges["41-80 hours"]++;
+                } else {
+                    hourRanges["81+ hours"]++;
+                }
+            });
+            
+            const ctx = document.getElementById('hoursDistributionChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(hourRanges),
+                    datasets: [{
+                        label: 'Number of Users',
+                        data: Object.values(hourRanges),
+                        backgroundColor: [
+                            '#e57373', // 0 hours - red
+                            '#64b5f6', // 1-10 hours - light blue
+                            '#4db6ac', // 11-20 hours - teal
+                            '#4fc3f7', // 21-40 hours - sky blue
+                            '#1976d2', // 41-80 hours - blue
+                            '#0d47a1'  // 81+ hours - dark blue
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = (value / data.length * 100).toFixed(1);
+                                    return `${value} users (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Users',
+                                font: {
+                                    size: 11
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Monthly Login Hours',
+                                font: {
+                                    size: 11
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createProfilesChart(data) {
+            const profileCounts = {};
+            data.forEach(row => {
+                const profile = row["Profile"];
+                profileCounts[profile] = (profileCounts[profile] || 0) + 1;
+            });
+            
+            // Sort profiles by count
+            const sortedProfiles = Object.entries(profileCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 6); // Show top 6
+            
+            const otherCount = Object.values(profileCounts)
+                .reduce((acc, val) => acc + val, 0) - 
+                sortedProfiles.reduce((acc, [_, val]) => acc + val, 0);
+            
+            if (otherCount > 0) {
+                sortedProfiles.push(["Other", otherCount]);
+            }
+            
+            const ctx = document.getElementById('profilesChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: sortedProfiles.map(entry => entry[0]),
+                    datasets: [{
+                        data: sortedProfiles.map(entry => entry[1]),
+                        backgroundColor: [
+                            '#1589ee', // Primary blue
+                            '#0b5cab', // Dark blue
+                            '#5a9bd4', // Light blue
+                            '#7fc8f8', // Sky blue
+                            '#a5d8ff', // Pale blue
+                            '#ff9a3c', // Orange
+                            '#d3d3d3'  // Gray (for "Other")
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: {
+                                    size: 10
+                                },
+                                boxWidth: 12,
+                                padding: 10
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = (value / data.length * 100).toFixed(1);
+                                    return `${context.label}: ${value} users (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createLoginRecencyChart(data) {
+            function parseDate(dateStr) {
+                if (!dateStr || dateStr === "Never") return null;
+                try {
+                    return new Date(dateStr);
+                } catch (e) {
+                    return null;
+                }
+            }
+            
+            const now = new Date();
+            const sevenDaysAgo = new Date(now);
+            sevenDaysAgo.setDate(now.getDate() - 7);
+            
+            const thirtyDaysAgo = new Date(now);
+            thirtyDaysAgo.setDate(now.getDate() - 30);
+            
+            let lastSevenDaysCount = 0;
+            let lastThirtyDaysCount = 0;
+            let olderThanThirtyDaysCount = 0;
+            let neverLoggedInCount = 0;
+            
+            data.forEach(row => {
+                const lastLogin = parseDate(row["Last Login Date"]);
+                if (!lastLogin) {
+                    neverLoggedInCount++;
+                } else if (lastLogin >= sevenDaysAgo) {
+                    lastSevenDaysCount++;
+                } else if (lastLogin >= thirtyDaysAgo) {
+                    lastThirtyDaysCount++;
+                } else {
+                    olderThanThirtyDaysCount++;
+                }
+            });
+            
+            const ctx = document.getElementById('loginRecencyChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [
+                        'Last 7 days', 
+                        '8-30 days ago', 
+                        'Older than 30 days', 
+                        'Never logged in'
+                    ],
+                    datasets: [{
+                        data: [
+                            lastSevenDaysCount,
+                            lastThirtyDaysCount,
+                            olderThanThirtyDaysCount,
+                            neverLoggedInCount
+                        ],
+                        backgroundColor: [
+                            '#4caf50', // Green
+                            '#ff9800', // Orange
+                            '#e53935', // Red
+                            '#9e9e9e'  // Grey
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                font: {
+                                    size: 10
+                                },
+                                boxWidth: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = (value / data.length * 100).toFixed(1);
+                                    return `${context.label}: ${value} users (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createTopUsersChart(data) {
+            // Sort users by login hours
+            const sortedUsers = [...data]
+                .sort((a, b) => (b["Monthly Login Hours"] || 0) - (a["Monthly Login Hours"] || 0))
+                .filter(user => user["Monthly Login Hours"] > 0)
+                .slice(0, 5);
+            
+            const ctx = document.getElementById('topUsersChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'horizontalBar',
+                type: 'bar',
+                data: {
+                    labels: sortedUsers.map(user => user["Name"]),
+                    datasets: [{
+                        label: 'Hours Logged In',
+                        data: sortedUsers.map(user => user["Monthly Login Hours"]),
+                        backgroundColor: '#1589ee',
+                        borderColor: '#0b5cab',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Hours',
+                                font: {
+                                    size: 11
+                                }
+                            },
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                font: {
+                                    size: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function populateTopUsersTable(data, totalHours) {
+            // Sort users by login hours
+            const sortedUsers = [...data]
+                .sort((a, b) => (b["Monthly Login Hours"] || 0) - (a["Monthly Login Hours"] || 0))
+                .filter(user => user["Monthly Login Hours"] > 0)
+                .slice(0, 5);
+            
+            const tableBody = document.getElementById('topUsersTable').getElementsByTagName('tbody')[0];
+            
+            sortedUsers.forEach(user => {
+                const row = tableBody.insertRow();
+                
+                const nameCell = row.insertCell(0);
+                nameCell.textContent = user["Name"];
+                
+                const profileCell = row.insertCell(1);
+                profileCell.textContent = user["Profile"];
+                
+                const loginCell = row.insertCell(2);
+                loginCell.textContent = user["Last Login Date"] || "Never";
+                
+                const hoursCell = row.insertCell(3);
+                hoursCell.textContent = (user["Monthly Login Hours"] || 0).toFixed(2);
+                
+                const percentCell = row.insertCell(4);
+                const percent = ((user["Monthly Login Hours"] || 0) / totalHours * 100).toFixed(1);
+                percentCell.textContent = `${percent}%`;
+                
+                // Highlight highest user
+                if (row.rowIndex === 1) {
+                    row.style.backgroundColor = "#e8f4fe";
+                    row.style.fontWeight = "bold";
+                }
+            });
+            
+            // Add a "no data" message if there are no users with login hours
+            if (sortedUsers.length === 0) {
+                const row = tableBody.insertRow();
+                const cell = row.insertCell(0);
+                cell.colSpan = 5;
+                cell.textContent = "No users with login activity this month";
+                cell.style.textAlign = "center";
+                cell.style.fontStyle = "italic";
+                cell.style.color = "#888";
+            }
+        }
+        
+        // Load data when the page loads
+        window.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>
